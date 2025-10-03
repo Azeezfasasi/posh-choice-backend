@@ -51,7 +51,7 @@ app.use('/api/blog', blogRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 
 app.get('/', (req, res) => {
-  res.send('Adesola Plastic Store Backend Running');
+  res.send('Posh Choice Store Backend Running');
 });
 
 app.listen(PORT, () => {
