@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 5000;
 // CORS middleware (must be before any other middleware/routes)
 app.use(cors({
   origin: [
-    'https://posh-choice.netlify.app/',
+    'https://posh-choice.netlify.app',
     'http://localhost:5173'
   ], // your frontend URL
   credentials: true, // if you use cookies/auth
