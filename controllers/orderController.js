@@ -3,19 +3,8 @@ const Product = require('../models/Product'); // To update stock quantity
 const User = require('../models/User'); 
 const Counter = require('../models/Counter'); 
 const mongoose = require('mongoose');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
-
-// Nodemailer transporter (reuse config from userController.js)
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT), // Ensure port is a number
-    secure: process.env.EMAIL_SECURE === 'true', // Ensure secure is a boolean
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
+const { sendEmail } = require('../utils/emailService');
 
 // Helper to get admin emails from .env (comma-separated)
 function getAdminEmails() {
@@ -25,14 +14,7 @@ function getAdminEmails() {
 
 // Helper to send order notification emails (with optional cc/bcc)
 async function sendOrderNotification({ to, subject, html, cc, bcc }) {
-    await transporter.sendMail({
-        to,
-        cc,
-        bcc,
-        from: process.env.EMAIL_USER,
-        subject,
-        html
-    });
+    await sendEmail(to, subject, html, { cc, bcc, fromEmail: process.env.EMAIL_USER });
 }
 
 // Helper function to get and increment sequence value
@@ -48,7 +30,7 @@ async function getNextSequenceValue(sequenceName) {
 // Helper function to format the order number
 function formatOrderNumber(sequenceNumber) {
     const paddedSequence = String(sequenceNumber).padStart(9, '0');
-    return `APS${paddedSequence}`;
+    return `POSH${paddedSequence}`;
 }
 
 exports.createOrder = async (req, res) => {

@@ -1,17 +1,9 @@
-const nodemailer = require('nodemailer');
 const QuoteRequest = require('../models/QuoteRequest');
 const User = require('../models/User'); 
 require('dotenv').config();
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: process.env.EMAIL_SECURE === 'true',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// Use Brevo email helper (fallbacks to nodemailer are still possible elsewhere)
+const { sendEmail } = require('../utils/emailService');
 
 // Helper to get admin emails from .env (comma-separated)
 function getAdminEmails() {
@@ -30,25 +22,31 @@ exports.sendQuoteRequest = async (req, res) => {
     const quote = new QuoteRequest({ name, email, phone, service, message });
     await quote.save();
 
-    // Send email to admins
+    // Send email to admins via Brevo
     const adminEmails = getAdminEmails();
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: adminEmails[0] || process.env.RECEIVER_EMAIL, // fallback to RECEIVER_EMAIL if no admins
-      cc: adminEmails.length > 1 ? adminEmails.slice(1) : undefined,
-      subject: `Quote Request from ${quote.name} on Posh Choice Store`,
-      text: `Service/Product Category: ${quote.service}\nMessage: ${quote.message}\nFrom: ${quote.name} <${quote.email}>`,
-      html: `<p><strong>Hello Admin,</strong></p><p>A new quote request has just been submitted through the Adesola Pastics Store website. Please review the details below:</p><p><strong>Selrvice/Product Category Requested:</strong> ${quote.service}</p><p><strong>Message:</strong> ${quote.message}</p><p><strong>From:</strong> ${quote.name} (${quote.email}) (${quote.phone})</p><br /><p>Please <a href="https://adesolaplasticsstore.com.ng/login">log in</a> to your admin dashboard to follow up or assign this request to a team member.</p>`
-    };
-    await transporter.sendMail(mailOptions);
+    const adminTo = adminEmails[0] || process.env.RECEIVER_EMAIL;
+    const adminCc = adminEmails.length > 1 ? adminEmails.slice(1) : undefined;
 
-    // Send confirmation email to customer
-    await transporter.sendMail({
-      to: quote.email,
-      from: process.env.EMAIL_USER,
-      subject: 'We Received Your Quote Request on Posh Choice Store',
-      html: `<h2>Thank you for submitting a quote request through the Posh Choice Store website!</h2><p>Dear ${quote.name},</p><p>We have received your request for <strong>${quote.service}</strong> and we are currently reviewing the details of your request to ensure we provide the most accurate and tailored response.</p><p>One of our team will contact you shortly to discuss your requirements and the best solutions available. We appreciate your interest and trust in Posh Choice Store.</p><p>If you have any additional information you'd like to share in the meantime, please feel free to reply to this email.</p><p><strong>Your message:</strong> ${quote.message}</p><p>Kind regards,<br/><strong>Posh Choice Store Team</strong></p,<br/><br/><p><em>If you did not request a quote, please ignore this email.</em></p>`
-    });
+    await sendEmail(adminTo, `Quote Request from ${quote.name} on Posh Choice Store`, `
+      <p><strong>Hello Admin,</strong></p>
+      <p>A new quote request has just been submitted through the Posh Choice Store website. Please review the details below:</p>
+      <p><strong>Service/Product Category Requested:</strong> ${quote.service}</p>
+      <p><strong>Message:</strong> ${quote.message}</p>
+      <p><strong>From:</strong> ${quote.name} (${quote.email}) (${quote.phone})</p>
+      <br /><p>Please <a href="https://adesolaplasticsstore.com.ng/login">log in</a> to your admin dashboard to follow up or assign this request to a team member.</p>
+    `, { cc: adminCc, fromEmail: process.env.EMAIL_USER });
+
+    // Send confirmation email to customer via Brevo
+    await sendEmail(quote.email, 'We Received Your Quote Request on Posh Choice Store', `
+      <h2>Thank you for submitting a quote request through the Posh Choice Store website!</h2>
+      <p>Dear ${quote.name},</p>
+      <p>We have received your request for <strong>${quote.service}</strong> and we are currently reviewing the details of your request to ensure we provide the most accurate and tailored response.</p>
+      <p>One of our team will contact you shortly to discuss your requirements and the best solutions available. We appreciate your interest and trust in Posh Choice Store.</p>
+      <p>If you have any additional information you'd like to share in the meantime, please feel free to reply to this email.</p>
+      <p><strong>Your message:</strong> ${quote.message}</p>
+      <p>Kind regards,<br/><strong>Posh Choice Store Team</strong></p>
+      <p><em>If you did not request a quote, please ignore this email.</em></p>
+    `, { fromEmail: process.env.EMAIL_USER });
 
     res.status(200).json({ message: 'Quote request sent and saved successfully!' });
   } catch (err) {
@@ -92,14 +90,9 @@ exports.updateQuoteRequest = async (req, res) => {
     if (updated && updated.email) {
       const statusText = req.body.status ? `<p><strong>Status:</strong> ${req.body.status}</p>` : '';
       const detailsText = Object.keys(req.body).filter(k => k !== 'status').map(k => `<p><strong>${k}:</strong> ${req.body[k]}</p>`).join('');
-      await transporter.sendMail({
-        to: updated.email,
-        from: process.env.EMAIL_USER,
-        subject: 'Your Quote Request Has Been Updated',
-        html: `
+      await sendEmail(updated.email, 'Your Quote Request Has Been Updated', `
         <p>Hi ${updated.name},</p>
-        <h2>Your Quote Request Update</h2>${statusText}${detailsText}<p>If you have questions, reply to this email or track ypu order status using <a href="https://adesolaplasticsstore.com.ng/app/trackorder">this link</a> with the order tracking number provided.</p>`
-      });
+        <h2>Your Quote Request Update</h2>${statusText}${detailsText}<p>If you have questions, reply to this email or track ypu order status using <a href="https://adesolaplasticsstore.com.ng/app/trackorder">this link</a> with the order tracking number provided.</p>`, { fromEmail: process.env.EMAIL_USER });
     }
     res.status(200).json(updated);
   } catch (err) {

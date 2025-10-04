@@ -1,8 +1,8 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
+const { sendEmail } = require('../utils/emailService');
 
 // Helper: generate JWT
 const generateToken = (user) => {
@@ -26,31 +26,11 @@ exports.register = async (req, res) => {
     const user = await User.create({ name, email, password, role });
     const token = generateToken(user);
 
-    // --- EMAIL NOTIFICATIONS (Zoho SMTP) ---
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: process.env.EMAIL_PORT,
-      secure: process.env.EMAIL_SECURE === 'true',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-    // Send welcome email to user
-    await transporter.sendMail({
-      to: user.email,
-      from: process.env.EMAIL_USER,
-      subject: 'Welcome to Posh Choice Store',
-      html: `<p>Hi ${user.name},</p><p>Welcome to Posh Choice Store! Your account has been created successfully.</p><br /> You can now login using this <a href="https://adesolaplasticsstore.com.ng/login">link</a>`
-    });
+    // --- EMAIL NOTIFICATIONS (via Brevo) ---
+    await sendEmail(user.email, 'Welcome to Posh Choice Store', `<p>Hi ${user.name},</p><p>Welcome to Posh Choice Store! Your account has been created successfully.</p><br /> You can now login using this <a href="https://adesolaplasticsstore.com.ng/login">link</a>`, { fromEmail: process.env.EMAIL_USER });
     // Send notification email to admin
     if (process.env.ADMIN_EMAIL) {
-      await transporter.sendMail({
-        to: process.env.ADMIN_EMAIL,
-        from: process.env.EMAIL_USER,
-        subject: 'New User Registration on Posh Choice Store',
-        html: `<p>A new user has registered on Posh Choice Store website:</p><ul><li>Name: ${user.name}</li><li>Email: ${user.email}</li><li>Role: ${user.role || 'customer'}</li></ul>`
-      });
+      await sendEmail(process.env.ADMIN_EMAIL, 'New User Registration on Posh Choice Store', `<p>A new user has registered on Posh Choice Store website:</p><ul><li>Name: ${user.name}</li><li>Email: ${user.email}</li><li>Role: ${user.role || 'customer'}</li></ul>`, { fromEmail: process.env.EMAIL_USER });
     }
     // --- END EMAIL NOTIFICATIONS ---
 
@@ -84,23 +64,9 @@ exports.requestPasswordReset = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
-    // Send email (Zoho SMTP)
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: process.env.EMAIL_PORT,
-      secure: process.env.EMAIL_SECURE === 'true',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
+    // Send password reset email via Brevo
     const resetUrl = `${process.env.FRONTEND_URL || 'https://itservicepro-backend.onrender.com'}/reset-password/${token}`;
-    await transporter.sendMail({
-      to: user.email,
-      from: process.env.EMAIL_USER,
-      subject: 'Password Reset',
-      html: `<p>You requested a password reset.</p><p>Click <a href="${resetUrl}">here</a> to reset your password. This link expires in 1 hour.</p>`
-    });
+    await sendEmail(user.email, 'Password Reset', `<p>You requested a password reset.</p><p>Click <a href="${resetUrl}">here</a> to reset your password. This link expires in 1 hour.</p>`, { fromEmail: process.env.EMAIL_USER });
     res.json({ message: 'Password reset email sent.' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to send reset email.', details: err.message });

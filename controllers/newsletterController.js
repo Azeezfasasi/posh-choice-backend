@@ -1,20 +1,10 @@
 const NewsletterSubscriber = require('../models/NewsletterSubscriber');
 const Newsletter = require('../models/Newsletter');
 const User = require('../models/User');
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 require('dotenv').config();
 
-// Use Zoho SMTP for all newsletter emails
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: process.env.EMAIL_SECURE === 'true',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+const { sendEmail } = require('../utils/emailService');
 
 // Subscribe to newsletter
 exports.subscribe = async (req, res) => {
@@ -42,13 +32,9 @@ exports.subscribe = async (req, res) => {
       unsubscribeToken = crypto.randomBytes(24).toString('hex');
       subscriber = await NewsletterSubscriber.create({ email, name, unsubscribeToken });
     }
-    // Send confirmation email to subscriber
+    // Send confirmation email to subscriber via Brevo
     const unsubscribeUrl = `${process.env.FRONTEND_URL || 'https://adesolaplasticsstore.com.ng'}/api/newsletter/unsubscribe/${unsubscribeToken}`;
-    await transporter.sendMail({
-      to: email,
-      from: process.env.EMAIL_USER,
-      subject: 'Newsletter Subscription Confirmed',
-      html: `
+    await sendEmail(email, 'Newsletter Subscription Confirmed', `
         <div style="max-width:520px;margin:auto;border-radius:8px;border:1px solid #e0e0e0;background:#fff;overflow:hidden;font-family:sans-serif;">
           <div style="background:#00B9F1;padding:24px 0;text-align:center;">
             <img src="adesolaplasticsstore.com.ng/itfavicon.png" alt="Adesola Logo" style="height:60px;margin-bottom:8px;" />
@@ -63,8 +49,7 @@ exports.subscribe = async (req, res) => {
             <p style="margin-top:32px;color:#888;font-size:0.95rem;">Best regards,<br/>Posh Choice Store</p>
           </div>
         </div>
-      `
-    });
+    `, { fromEmail: process.env.EMAIL_USER });
     res.status(201).json({ message: 'Subscribed successfully!' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to subscribe.', details: err.message });
@@ -149,14 +134,8 @@ exports.sendNewsletter = async (req, res) => {
       emails = (await NewsletterSubscriber.find({ isActive: true })).map(s => s.email);
     }
     const newsletter = await Newsletter.create({ subject, content, recipients: emails, sentAt: new Date(), sentBy: req.user?._id, status: 'sent' });
-    // Send email to all
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: emails[0],
-      bcc: emails.length > 1 ? emails.slice(1) : undefined,
-      subject,
-      html: content
-    });
+    // Send email to all via Brevo (send to first recipient, bcc others)
+    await sendEmail(emails[0], subject, content, { bcc: emails.length > 1 ? emails.slice(1) : undefined, fromEmail: process.env.EMAIL_USER });
     // Update lastNewsletterSentAt for subscribers
     await NewsletterSubscriber.updateMany({ email: { $in: emails } }, { lastNewsletterSentAt: new Date() });
     res.status(200).json({ message: 'Newsletter sent!', newsletter });
