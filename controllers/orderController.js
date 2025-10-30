@@ -14,7 +14,9 @@ function getAdminEmails() {
 
 // Helper to send order notification emails (with optional cc/bcc)
 async function sendOrderNotification({ to, subject, html, cc, bcc }) {
-    await sendEmail(to, subject, html, { cc, bcc, fromEmail: process.env.EMAIL_USER });
+    // Prefer the Brevo-specified sender email when available so replies go to the brand address
+    const fromEmail = process.env.BREVO_EMAIL_USER || process.env.EMAIL_USER;
+    await sendEmail(to, subject, html, { cc, bcc, fromEmail, replyTo: fromEmail });
 }
 
 // Helper function to get and increment sequence value
@@ -218,7 +220,7 @@ exports.createOrder = async (req, res) => {
                     </ul>
                     <h4 style="margin-top: 24px; color: #333;">Shipping Details</h4>
                     <p style="margin-bottom: 0;">${createdOrder.shippingAddress.address1}, ${createdOrder.shippingAddress.city}, ${createdOrder.shippingAddress.zipCode}, ${createdOrder.shippingAddress.country}</p>
-                    <p style="margin-top: 24px;">You can track your order status on <a href="https://adesolaplasticsstore.com.ng/app/trackorder" style="color: #e67e22;">our website</a>.</p>
+                    <p style="margin-top: 24px;">You can track your order status on <a href="https://poshchoice.com.ng/app/trackorder" style="color: #e67e22;">our website</a>.</p>
                     <p style="margin-top: 32px; font-size: 15px; color: #888;">Thank you for shopping with us!<br/>Posh Choice Store</p>
                   </div>
                 </div>
@@ -447,7 +449,7 @@ exports.updateOrderStatus = async (req, res) => {
                 <p><strong>Thank you for shopping with Posh Choice Store.</strong></p>
                 <p>We appreciate your trust and look forward to serving you again.</p>
                 <p>Warm regards,</p>
-                <p>Posh Choice Store - <a href="https://adesolaplasticsstore.com.ng/app/trackorder">Track your order status here.</a></p>
+                <p>Posh Choice Store - <a href="https://poshchoice.com.ng/app/trackorder">Track your order status here.</a></p>
             `;
             const adminOrderDetailsHtml = `
                 <h3>Hi Posh Choice Store</h3>
