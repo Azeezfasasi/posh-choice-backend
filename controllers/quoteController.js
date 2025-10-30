@@ -33,7 +33,7 @@ exports.sendQuoteRequest = async (req, res) => {
       <p><strong>Service/Product Category Requested:</strong> ${quote.service}</p>
       <p><strong>Message:</strong> ${quote.message}</p>
       <p><strong>From:</strong> ${quote.name} (${quote.email}) (${quote.phone})</p>
-      <br /><p>Please <a href="https://adesolaplasticsstore.com.ng/login">log in</a> to your admin dashboard to follow up or assign this request to a team member.</p>
+      <br /><p>Please <a href="https://poshchoice.com.ng/login">log in</a> to your admin dashboard to follow up or assign this request to a team member.</p>
     `, { cc: adminCc, fromEmail: process.env.EMAIL_USER });
 
     // Send confirmation email to customer via Brevo
@@ -92,7 +92,7 @@ exports.updateQuoteRequest = async (req, res) => {
       const detailsText = Object.keys(req.body).filter(k => k !== 'status').map(k => `<p><strong>${k}:</strong> ${req.body[k]}</p>`).join('');
       await sendEmail(updated.email, 'Your Quote Request Has Been Updated', `
         <p>Hi ${updated.name},</p>
-        <h2>Your Quote Request Update</h2>${statusText}${detailsText}<p>If you have questions, reply to this email or track ypu order status using <a href="https://adesolaplasticsstore.com.ng/app/trackorder">this link</a> with the order tracking number provided.</p>`, { fromEmail: process.env.EMAIL_USER });
+        <h2>Your Quote Request Update</h2>${statusText}${detailsText}<p>If you have questions, reply to this email or track your order status using <a href="https://poshchoice.com.ng/app/trackorder">this link</a> with the order tracking number provided.</p>`, { fromEmail: process.env.EMAIL_USER });
     }
     res.status(200).json(updated);
   } catch (err) {

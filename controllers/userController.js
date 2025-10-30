@@ -27,7 +27,7 @@ exports.register = async (req, res) => {
     const token = generateToken(user);
 
     // --- EMAIL NOTIFICATIONS (via Brevo) ---
-    await sendEmail(user.email, 'Welcome to Posh Choice Store', `<p>Hi ${user.name},</p><p>Welcome to Posh Choice Store! Your account has been created successfully.</p><br /> You can now login using this <a href="https://adesolaplasticsstore.com.ng/login">link</a>`, { fromEmail: process.env.EMAIL_USER });
+    await sendEmail(user.email, 'Welcome to Posh Choice Store', `<p>Hi ${user.name},</p><p>Welcome to Posh Choice Store! Your account has been created successfully.</p><br /> You can now login using this <a href="https://poshchoice.com.ng/login">link</a>`, { fromEmail: process.env.EMAIL_USER });
     // Send notification email to admin
     if (process.env.ADMIN_EMAIL) {
       await sendEmail(process.env.ADMIN_EMAIL, 'New User Registration on Posh Choice Store', `<p>A new user has registered on Posh Choice Store website:</p><ul><li>Name: ${user.name}</li><li>Email: ${user.email}</li><li>Role: ${user.role || 'customer'}</li></ul>`, { fromEmail: process.env.EMAIL_USER });
@@ -65,7 +65,7 @@ exports.requestPasswordReset = async (req, res) => {
     await user.save();
 
     // Send password reset email via Brevo
-    const resetUrl = `${process.env.FRONTEND_URL || 'https://itservicepro-backend.onrender.com'}/reset-password/${token}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'https://poshchoice.com.ng'}/reset-password/${token}`;
     await sendEmail(user.email, 'Password Reset', `<p>You requested a password reset.</p><p>Click <a href="${resetUrl}">here</a> to reset your password. This link expires in 1 hour.</p>`, { fromEmail: process.env.EMAIL_USER });
     res.json({ message: 'Password reset email sent.' });
   } catch (err) {

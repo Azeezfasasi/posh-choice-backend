@@ -33,11 +33,10 @@ exports.subscribe = async (req, res) => {
       subscriber = await NewsletterSubscriber.create({ email, name, unsubscribeToken });
     }
     // Send confirmation email to subscriber via Brevo
-    const unsubscribeUrl = `${process.env.FRONTEND_URL || 'https://adesolaplasticsstore.com.ng'}/api/newsletter/unsubscribe/${unsubscribeToken}`;
+    const unsubscribeUrl = `${process.env.FRONTEND_URL || 'https://poshchoice.com.ng'}/api/newsletter/unsubscribe/${unsubscribeToken}`;
     await sendEmail(email, 'Newsletter Subscription Confirmed', `
         <div style="max-width:520px;margin:auto;border-radius:8px;border:1px solid #e0e0e0;background:#fff;overflow:hidden;font-family:sans-serif;">
           <div style="background:#00B9F1;padding:24px 0;text-align:center;">
-            <img src="adesolaplasticsstore.com.ng/itfavicon.png" alt="Adesola Logo" style="height:60px;margin-bottom:8px;" />
             <h1 style="color:#fff;margin:0;font-size:2rem;">Welcome to Posh Choice Store!</h1>
           </div>
           <div style="padding:32px 24px 24px 24px;">
@@ -88,7 +87,7 @@ exports.unsubscribeByToken = async (req, res) => {
     // Optionally clear token to prevent reuse
     // subscriber.unsubscribeToken = undefined;
     await subscriber.save();
-    res.send('<div style="max-width:420px;margin:40px auto;padding:32px 24px;border-radius:8px;border:1px solid #e0e0e0;font-family:sans-serif;text-align:center;"><h2 style="color:#00B9F1;">You have been unsubscribed.</h2><p style="color:#444;">You will no longer receive our newsletters.</p><a href="https://adesolaplasticsstore.com.ng" style="display:inline-block;margin-top:18px;padding:10px 24px;background:#00B9F1;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;">Return to Website</a></div>');
+    res.send('<div style="max-width:420px;margin:40px auto;padding:32px 24px;border-radius:8px;border:1px solid #e0e0e0;font-family:sans-serif;text-align:center;"><h2 style="color:#00B9F1;">You have been unsubscribed.</h2><p style="color:#444;">You will no longer receive our newsletters.</p><a href="https://poshchoice.com.ng" style="display:inline-block;margin-top:18px;padding:10px 24px;background:#00B9F1;color:#fff;text-decoration:none;border-radius:4px;font-weight:bold;">Return to Website</a></div>');
   } catch (err) {
     res.status(500).send('Failed to unsubscribe.');
   }
