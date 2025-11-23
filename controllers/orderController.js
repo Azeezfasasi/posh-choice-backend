@@ -3,8 +3,28 @@ const Product = require('../models/Product'); // To update stock quantity
 const User = require('../models/User'); 
 const Counter = require('../models/Counter'); 
 const mongoose = require('mongoose');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
 require('dotenv').config();
 const { sendEmail } = require('../utils/emailService');
+
+// --- Multer Setup for Payment Proof Upload (Memory Storage) ---
+const memoryStorage = multer.memoryStorage();
+
+const proofFileFilter = (req, file, cb) => {
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Invalid file type "${file.mimetype}". Only JPEG, PNG, GIF, and PDF are allowed.`), false);
+  }
+};
+
+exports.uploadPaymentProofMiddleware = multer({
+  storage: memoryStorage,
+  fileFilter: proofFileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+}).single('proof'); // Single file with field name 'proof'
 
 // Helper to get admin emails from .env (comma-separated)
 function getAdminEmails() {
@@ -568,14 +588,15 @@ exports.updateOrderPaymentStatus = async (req, res) => {
 exports.uploadPaymentProof = async (req, res) => {
     try {
         const { orderId } = req.params;
-        const proofUrl = req.body.proofUrl; // Cloudinary URL sent from frontend
 
-        if (!proofUrl) {
-            return res.status(400).json({ message: 'Proof of payment URL is required' });
-        }
-
+        // Validate order ID
         if (!mongoose.Types.ObjectId.isValid(orderId)) {
             return res.status(400).json({ message: 'Invalid order ID' });
+        }
+
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({ message: 'Payment proof file is required' });
         }
 
         const order = await Order.findById(orderId);
@@ -593,18 +614,44 @@ exports.uploadPaymentProof = async (req, res) => {
             return res.status(400).json({ message: 'Proof upload is only allowed for Bank Transfer payments' });
         }
 
-        // Update order with proof URL and timestamp
-        order.bankTransferProof = proofUrl;
-        order.paymentProofUploadedAt = Date.now();
-
-        const updatedOrder = await order.save();
-
-        console.log(`Payment proof uploaded for order ${orderId} by user ${req.user._id}`);
-
-        res.status(200).json({
-            message: 'Payment proof uploaded successfully',
-            order: updatedOrder
+        // Upload file to Cloudinary
+        console.log(`Uploading payment proof for order ${orderId}...`, {
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            fileMime: req.file.mimetype
         });
+
+        try {
+            const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            const uploadOptions = {
+                folder: 'poshchoice/payment-proofs',
+                resource_type: 'auto',
+                public_id: `proof_${orderId}_${Date.now()}`,
+            };
+
+            const uploadedFile = await cloudinary.uploader.upload(dataUri, uploadOptions);
+
+            // Update order with proof URL and timestamp
+            order.bankTransferProof = uploadedFile.secure_url;
+            order.paymentProofUploadedAt = Date.now();
+
+            const updatedOrder = await order.save();
+
+            console.log(`Payment proof uploaded successfully for order ${orderId}`);
+
+            res.status(200).json({
+                message: 'Payment proof uploaded successfully',
+                order: updatedOrder,
+                proofUrl: uploadedFile.secure_url
+            });
+
+        } catch (cloudinaryError) {
+            console.error('Cloudinary upload error:', cloudinaryError);
+            return res.status(500).json({
+                message: 'Failed to upload file to storage',
+                details: cloudinaryError.message
+            });
+        }
 
     } catch (error) {
         console.error('Error uploading payment proof:', error);
