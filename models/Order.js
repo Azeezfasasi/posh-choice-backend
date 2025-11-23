@@ -125,6 +125,14 @@ const orderSchema = mongoose.Schema({
     bankReference: { // Reference number for bank transfers
         type: String,
     },
+    bankTransferProof: { // URL to proof of payment image on Cloudinary
+        type: String,
+        default: null,
+    },
+    paymentProofUploadedAt: { // Timestamp when proof was uploaded
+        type: Date,
+        default: null,
+    },
     paymentStatus: {
         type: String,
         enum: ['Paid', 'Processing', 'Not Paid'],

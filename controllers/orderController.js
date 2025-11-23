@@ -564,3 +564,50 @@ exports.updateOrderPaymentStatus = async (req, res) => {
         res.status(500).json({ message: 'Failed to update payment status', details: error.message });
     }
 };
+
+exports.uploadPaymentProof = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const proofUrl = req.body.proofUrl; // Cloudinary URL sent from frontend
+
+        if (!proofUrl) {
+            return res.status(400).json({ message: 'Proof of payment URL is required' });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(orderId)) {
+            return res.status(400).json({ message: 'Invalid order ID' });
+        }
+
+        const order = await Order.findById(orderId);
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        // Verify that the user uploading the proof owns the order
+        if (order.userId.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+            return res.status(403).json({ message: 'Not authorized to upload proof for this order' });
+        }
+
+        // Only allow proof upload for Bank Transfer payment method
+        if (order.paymentMethod !== 'Bank Transfer') {
+            return res.status(400).json({ message: 'Proof upload is only allowed for Bank Transfer payments' });
+        }
+
+        // Update order with proof URL and timestamp
+        order.bankTransferProof = proofUrl;
+        order.paymentProofUploadedAt = Date.now();
+
+        const updatedOrder = await order.save();
+
+        console.log(`Payment proof uploaded for order ${orderId} by user ${req.user._id}`);
+
+        res.status(200).json({
+            message: 'Payment proof uploaded successfully',
+            order: updatedOrder
+        });
+
+    } catch (error) {
+        console.error('Error uploading payment proof:', error);
+        res.status(500).json({ message: 'Failed to upload payment proof', details: error.message });
+    }
+};

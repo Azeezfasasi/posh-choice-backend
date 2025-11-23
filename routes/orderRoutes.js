@@ -24,6 +24,9 @@ router.put('/:id/status', auth, authorizeRoles, orderController.updateOrderStatu
 // PUT /api/orders/:id/payment-status
 router.put('/:id/payment-status', auth, authorizeRoles, orderController.updateOrderPaymentStatus);
 
+// POST /api/orders/:orderId/upload-payment-proof - Upload Bank Transfer proof
+router.post('/:orderId/upload-payment-proof', auth, orderController.uploadPaymentProof);
+
 // DELETE /api/orders/:id
 router.delete('/:id', auth, authorizeRoles, orderController.deleteOrder);
 
