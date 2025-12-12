@@ -613,10 +613,15 @@ exports.uploadPaymentProof = async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
 
-        // Verify that the user uploading the proof owns the order
-        if (order.userId.toString() !== req.user._id.toString() && !req.user.isAdmin) {
-            return res.status(403).json({ message: 'Not authorized to upload proof for this order' });
+        // Authorization check - allow authenticated users who own the order or admins
+        // For guests: no userId, so skip the ownership check (guests can upload their proof)
+        if (req.user) {
+            // Authenticated user - check if they own the order
+            if (order.userId && order.userId.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+                return res.status(403).json({ message: 'Not authorized to upload proof for this order' });
+            }
         }
+        // For guests (req.user is undefined), we allow the upload since they just created the order
 
         // Only allow proof upload for Bank Transfer payment method
         if (order.paymentMethod !== 'Bank Transfer') {
