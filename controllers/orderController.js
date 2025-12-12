@@ -350,9 +350,17 @@ exports.getOrderById = async (req, res) => {
         }
 
         // Allow user to view their own order, or admin to view any order
-        if (order.userId._id.toString() !== req.user._id.toString() && !req.user.isAdmin) {
-             // Assuming req.user has an isAdmin field from auth middleware
-            return res.status(403).json({ message: 'Not authorized to view this order' });
+        // For guest orders, userId is null, so only admins can view them
+        if (order.userId) {
+            // This is an authenticated user's order
+            if (order.userId._id.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+                return res.status(403).json({ message: 'Not authorized to view this order' });
+            }
+        } else {
+            // This is a guest order - only admins can view it
+            if (!req.user.isAdmin) {
+                return res.status(403).json({ message: 'Not authorized to view this order' });
+            }
         }
 
         res.status(200).json(order);
