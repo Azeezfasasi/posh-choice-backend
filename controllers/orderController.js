@@ -181,7 +181,7 @@ exports.createOrder = async (req, res) => {
 
 
         const newOrder = new Order({
-            userId: req.user._id,
+            userId: req.user ? req.user._id : null,
             orderNumber: orderNumber,
             orderItems: finalOrderItems,
             shippingAddress,
@@ -215,15 +215,24 @@ exports.createOrder = async (req, res) => {
 
         // --- EMAIL NOTIFICATIONS ---
         try {
-            // Fetch user details for email
-            const user = await User.findById(req.user._id);
+            // Fetch user details for email if authenticated, otherwise use shipping address
+            let userEmail, userName;
+            if (req.user) {
+                const user = await User.findById(req.user._id);
+                userEmail = user.email;
+                userName = user.name;
+            } else {
+                // For guest orders, use shipping address info
+                userEmail = shippingAddress.email || 'guest@order'; // Use email from shipping address
+                userName = shippingAddress.fullName;
+            }
             const adminEmails = getAdminEmails();
 
             // Customer email template
             const customerOrderDetailsHtml = `
                 <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px; color: #222;">
                   <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #eee; padding: 32px;">
-                    <h2 style="color: #e67e22;">Thank you for your order, ${user.name}!</h2>
+                    <h2 style="color: #e67e22;">Thank you for your order, ${userName}!</h2>
                     <p style="font-size: 16px;">We have received your order <b>${createdOrder.orderNumber}</b> and are currently processing it.</p>
                     <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
                     <h3 style="color: #333;">Order Summary</h3>
@@ -263,7 +272,7 @@ exports.createOrder = async (req, res) => {
                       <tr><td>Customer's Note:</td><td>${createdOrder.shippingAddress.note}</td></tr>
                     </table>
                     <h4 style="margin-top: 24px; color: #333;">Customer Details</h4>
-                    <p><b>Name:</b> ${user.name} <br/><b>Email:</b> ${user.email}</p>
+                    <p><b>Name:</b> ${userName} <br/><b>Email:</b> ${userEmail}</p>
                     <h4 style="margin-top: 24px; color: #333;">Items Ordered</h4>
                     <ul style="padding-left: 20px;">
                       ${createdOrder.orderItems.map(item => `<li>${item.name} x ${item.quantity} (₦${item.price})</li>`).join('')}

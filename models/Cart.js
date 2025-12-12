@@ -29,8 +29,11 @@ const cartSchema = mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        unique: true, 
+        default: null, // Allow null for guest carts
+    },
+    guestSessionId: {
+        type: String,
+        default: null, // For tracking guest carts
     },
     items: [cartItemSchema], // Array of products in the cart
     createdAt: {

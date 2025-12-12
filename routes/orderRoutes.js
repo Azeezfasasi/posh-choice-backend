@@ -3,8 +3,8 @@ const router = express.Router();
 const orderController = require('../controllers/orderController');
 const { auth, authorizeRoles } = require('../middleware/auth'); 
 
-// POST /api/orders
-router.post('/', auth, orderController.createOrder);
+// POST /api/orders - Allow both authenticated users and guests
+router.post('/', orderController.createOrder);
 
 // GET /api/orders
 router.get('/', auth, authorizeRoles, orderController.getAllOrders);

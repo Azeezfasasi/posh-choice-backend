@@ -1,17 +1,33 @@
 const Cart = require('../models/Cart');
-const Product = require('../models/Product'); 
+const Product = require('../models/Product');
+
+// Helper function to get cart query - handles both authenticated and guest users
+function getCartQuery(req) {
+  if (req.user && req.user._id) {
+    // Authenticated user
+    return { userId: req.user._id };
+  } else {
+    // Guest user - use guestSessionId from request
+    const guestSessionId = req.headers['x-guest-session-id'] || req.query.guestSessionId;
+    if (!guestSessionId) {
+      throw new Error('Guest session ID is required for guest carts');
+    }
+    return { guestSessionId, userId: null };
+  }
+}
 
 exports.getCart = async (req, res) => {
     try {
-        // Find the cart for the authenticated user
-        const cart = await Cart.findOne({ userId: req.user._id }).populate({
+        // Find cart for either authenticated or guest user
+        const cartQuery = getCartQuery(req);
+        const cart = await Cart.findOne(cartQuery).populate({
             path: 'items.productId',
             select: 'name price images stockQuantity slug'
         });
 
         if (!cart) {
             // If no cart exists, return an empty cart
-            return res.status(200).json({ userId: req.user._id, items: [] });
+            return res.status(200).json({ items: [] });
         }
         res.status(200).json(cart);
     } catch (error) {
@@ -22,7 +38,6 @@ exports.getCart = async (req, res) => {
 
 exports.addToCart = async (req, res) => {
     const { productId, quantity } = req.body;
-    const userId = req.user._id;
 
     if (!productId || !quantity || quantity <= 0) {
         return res.status(400).json({ message: 'Product ID and a valid quantity are required.' });
@@ -39,16 +54,17 @@ exports.addToCart = async (req, res) => {
             return res.status(400).json({ message: `Not enough stock for ${product.name}. Available: ${product.stockQuantity}` });
         }
 
-        let cart = await Cart.findOne({ userId });
+        // Get cart query for authenticated or guest user
+        const cartQuery = getCartQuery(req);
+        let cart = await Cart.findOne(cartQuery);
 
         // Denormalized data for cart item
         const newItem = {
             productId: product._id,
             name: product.name,
-            slug: product.slug, // <-- Add slug here
-            // Use the first image URL or a placeholder if no images exist
+            slug: product.slug,
             image: (product.images && product.images.length > 0) ? product.images[0].url : '/placehold.co/100x100/CCCCCC/000000?text=No+Image',
-            price: product.onSale ? product.salePrice : product.price, // Use salePrice if on sale
+            price: product.onSale ? product.salePrice : product.price,
             quantity: quantity,
         };
 
@@ -65,10 +81,9 @@ exports.addToCart = async (req, res) => {
                     return res.status(400).json({ message: `Adding ${quantity} to cart would exceed stock. Current in cart: ${existingItem.quantity}, Available: ${product.stockQuantity}` });
                 }
                 existingItem.quantity = newTotalQuantity;
-                // Optional: Update price or image if product details changed since it was added
-                existingItem.price = newItem.price; // Always update to current price
-                existingItem.image = newItem.image; // Always update to current image
-                existingItem.slug = newItem.slug; // Always update to current slug
+                existingItem.price = newItem.price;
+                existingItem.image = newItem.image;
+                existingItem.slug = newItem.slug;
             } else {
                 // Item not in cart, add new item
                 cart.items.push(newItem);
@@ -76,11 +91,23 @@ exports.addToCart = async (req, res) => {
             await cart.save();
             res.status(200).json({ message: 'Cart updated successfully', cart });
         } else {
-            // No cart for this user, create a new one
-            cart = new Cart({
-                userId,
+            // No cart exists, create a new one
+            const cartData = {
                 items: [newItem],
-            });
+            };
+            
+            if (req.user && req.user._id) {
+                cartData.userId = req.user._id;
+            } else {
+                // For guest, use guestSessionId
+                const guestSessionId = req.headers['x-guest-session-id'] || req.query.guestSessionId;
+                if (!guestSessionId) {
+                    return res.status(400).json({ message: 'Guest session ID is required' });
+                }
+                cartData.guestSessionId = guestSessionId;
+            }
+            
+            cart = new Cart(cartData);
             await cart.save();
             res.status(201).json({ message: 'Cart created and product added', cart });
         }
@@ -93,14 +120,14 @@ exports.addToCart = async (req, res) => {
 exports.updateCartItemQuantity = async (req, res) => {
     const { productId } = req.params;
     const { quantity } = req.body;
-    const userId = req.user._id;
 
     if (!quantity || quantity <= 0) {
         return res.status(400).json({ message: 'A valid quantity (greater than 0) is required.' });
     }
 
     try {
-        let cart = await Cart.findOne({ userId });
+        const cartQuery = getCartQuery(req);
+        let cart = await Cart.findOne(cartQuery);
 
         if (!cart) {
             return res.status(404).json({ message: 'Cart not found.' });
@@ -132,14 +159,14 @@ exports.updateCartItemQuantity = async (req, res) => {
 
 exports.removeCartItem = async (req, res) => {
     const { itemId } = req.params;
-    const userId = req.user._id;
 
     if (!itemId) {
         return res.status(400).json({ message: 'Cart item ID is required.' });
     }
 
     try {
-        let cart = await Cart.findOne({ userId });
+        const cartQuery = getCartQuery(req);
+        let cart = await Cart.findOne(cartQuery);
 
         if (!cart) {
             return res.status(404).json({ message: 'Cart not found.' });
@@ -161,10 +188,9 @@ exports.removeCartItem = async (req, res) => {
 };
 
 exports.clearCart = async (req, res) => {
-    const userId = req.user._id;
-
     try {
-        const cart = await Cart.findOneAndDelete({ userId });
+        const cartQuery = getCartQuery(req);
+        const cart = await Cart.findOneAndDelete(cartQuery);
 
         if (!cart) {
             return res.status(404).json({ message: 'Cart not found for this user.' });

@@ -26,6 +26,7 @@ const orderItemSchema = mongoose.Schema({
 
 const shippingAddressSchema = mongoose.Schema({
     fullName: { type: String, required: true },
+    email: { type: String }, // Email for guest checkout or notification
     address1: { type: String, required: true },
     address2: { type: String },
     city: { type: String, required: true },
@@ -49,7 +50,7 @@ const orderSchema = mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
+        default: null, // Allow null for guest orders
     },
     orderNumber: { // Unique order number
         type: String,

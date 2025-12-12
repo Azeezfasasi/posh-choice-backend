@@ -3,19 +3,27 @@ const router = express.Router();
 const cartController = require('../controllers/CartController');
 const { auth } = require('../middleware/auth');
 
-// GET user's cart - /api/cart
-router.get('/', auth, cartController.getCart);
+// Optional auth middleware - allows both authenticated and guest requests
+const optionalAuth = (req, res, next) => {
+  auth(req, res, (err) => {
+    // Ignore auth errors and proceed
+    next();
+  });
+};
 
-// POST add to cart - /api/cart
-router.post('/', auth, cartController.addToCart);
+// GET user's cart - /api/cart
+router.get('/', optionalAuth, cartController.getCart);
+
+// POST add to cart - /api/cart (works for guests and authenticated users)
+router.post('/', optionalAuth, cartController.addToCart);
 
 // PUT update cart item quantity - /api/cart/:productId
-router.put('/:productId', auth, cartController.updateCartItemQuantity);
+router.put('/:productId', optionalAuth, cartController.updateCartItemQuantity);
 
 // DELETE remove from cart - /api/cart/item/:itemId
-router.delete('/item/:itemId', auth, cartController.removeCartItem);
+router.delete('/item/:itemId', optionalAuth, cartController.removeCartItem);
 
 // DELETE clear cart - /api/cart
-router.delete('/', auth, cartController.clearCart);
+router.delete('/', optionalAuth, cartController.clearCart);
 
 module.exports = router;
