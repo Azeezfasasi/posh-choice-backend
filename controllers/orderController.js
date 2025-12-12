@@ -286,7 +286,7 @@ exports.createOrder = async (req, res) => {
 
             // Email to customer
             await sendOrderNotification({
-                to: user.email,
+                to: userEmail,
                 subject: `Your Order Confirmation - ${createdOrder.orderNumber} | Posh Choice Store`,
                 html: customerOrderDetailsHtml
             });
