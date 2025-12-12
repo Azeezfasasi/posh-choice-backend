@@ -26,7 +26,7 @@ app.use(cors({
   ], // your frontend URL
   credentials: true, // if you use cookies/auth
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-session-id'],
 }));
 // Handle preflight requests for all routes
 app.options('*', cors());
