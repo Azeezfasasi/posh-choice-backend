@@ -5,10 +5,7 @@ const { auth } = require('../middleware/auth');
 
 // Optional auth middleware - allows both authenticated and guest requests
 const optionalAuth = (req, res, next) => {
-  auth(req, res, (err) => {
-    // Ignore auth errors and proceed
-    next();
-  });
+  auth(req, res, next, true); // Pass true to make it optional
 };
 
 // GET user's cart - /api/cart

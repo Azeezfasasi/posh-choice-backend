@@ -2,12 +2,19 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const User = require('../models/User');
 
-const auth = async (req, res, next) => {
-  console.log('Auth called');
+const auth = async (req, res, next, isOptional = false) => {
+  console.log('Auth called, isOptional:', isOptional);
   const authHeader = req.headers.authorization;
+  
+  // If no auth header and it's optional, just proceed
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (isOptional) {
+      console.log('Auth middleware: Optional auth, no token provided, proceeding as guest');
+      return next();
+    }
     return res.status(401).json({ error: 'No token provided.' });
   }
+  
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
@@ -20,10 +27,13 @@ const auth = async (req, res, next) => {
     // Attach isAdmin for downstream checks
     req.user.isAdmin = req.user.role === 'admin' || req.user.role === 'super admin';
     console.log(`Auth middleware: User ID ${req.user._id} attached to req.user. isAdmin: ${req.user.isAdmin}`);
-    // req.user = decoded;
     next();
   } catch (err) {
     console.error('Auth middleware token error:', err.message);
+    if (isOptional) {
+      console.log('Auth middleware: Optional auth, token invalid, proceeding as guest');
+      return next();
+    }
     if (err.name === 'TokenExpiredError') {
         return res.status(401).json({ error: 'Not authorized, token expired.' });
     }
