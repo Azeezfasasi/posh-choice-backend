@@ -21,6 +21,8 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: [
     'https://poshchoice.com.ng',
+    'https://www.poshchoice.com.ng',
+    'http://www.poshchoice.com.ng',
     'https://posh-choice.netlify.app',
     'http://localhost:5173'
   ], // your frontend URL
