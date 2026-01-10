@@ -248,7 +248,7 @@ exports.createOrder = async (req, res) => {
                       ${createdOrder.orderItems.map(item => `<li>${item.name} x ${item.quantity} (₦${item.price})</li>`).join('')}
                     </ul>
                     <h4 style="margin-top: 24px; color: #333;">Shipping Details</h4>
-                    <p style="margin-bottom: 0;">${createdOrder.shippingAddress.address1}, ${createdOrder.shippingAddress.city}, ${createdOrder.shippingAddress.zipCode}, ${createdOrder.shippingAddress.country}</p>
+                    <p style="margin-bottom: 0;">${createdOrder.shippingAddress.address1}, ${createdOrder.shippingAddress.city}, ${createdOrder.shippingAddress.zipCode}, ${createdOrder.shippingAddress.country}, ${createdOrder.shippingAddress.phone}</p>
                     <p style="margin-top: 24px;">You can track your order status on <a href="https://poshchoice.com.ng/app/trackorder" style="color: #e67e22;">our website</a>.</p>
                     <p style="margin-top: 32px; font-size: 15px; color: #888;">Thank you for shopping with us!<br/>Posh Choice Store</p>
                   </div>
@@ -278,7 +278,7 @@ exports.createOrder = async (req, res) => {
                       ${createdOrder.orderItems.map(item => `<li>${item.name} x ${item.quantity} (₦${item.price})</li>`).join('')}
                     </ul>
                     <h4 style="margin-top: 24px; color: #333;">Shipping Details</h4>
-                    <p style="margin-bottom: 0;">${createdOrder.shippingAddress.address1}, ${createdOrder.shippingAddress.city}, ${createdOrder.shippingAddress.zipCode}, ${createdOrder.shippingAddress.country}</p>
+                    <p style="margin-bottom: 0;">${createdOrder.shippingAddress.address1}, ${createdOrder.shippingAddress.city}, ${createdOrder.shippingAddress.zipCode}, ${createdOrder.shippingAddress.country}, ${createdOrder.shippingAddress.phone}</p>
                     <p style="margin-top: 32px; font-size: 15px; color: #888;">Order placed via Posh Choice Store website.</p>
                   </div>
                 </div>
@@ -398,31 +398,69 @@ exports.updateOrderToDelivered = async (req, res) => {
         
         // --- EMAIL NOTIFICATIONS ---
         try {
-            const user = await User.findById(order.userId);
+            let userEmail, userName;
+            if (order.userId) {
+                const user = await User.findById(order.userId);
+                if (user) {
+                    userEmail = user.email;
+                    userName = user.name;
+                } else {
+                    console.warn(`User not found for order ${order._id}`);
+                    userEmail = null;
+                    userName = 'Customer';
+                }
+            } else {
+                // For guest orders, use shipping address info
+                userEmail = order.shippingAddress.email || null;
+                userName = order.shippingAddress.fullName || 'Guest';
+            }
+            
             const adminEmails = getAdminEmails();
-            const orderDetailsHtml = `
-                <h2>Order Delivered - ${order.orderNumber}</h2>
-                <p>Order for ${user.name} (${user.email}) has been marked as <strong>Delivered</strong>.</p>
-                <p><strong>Order Number:</strong> ${order.orderNumber}</p>
-                <p><strong>Status:</strong> Delivered</p>
-                <p><strong>Total:</strong> ₦${order.totalPrice}</p>
-            `;
-            const adminOrderDetailsHtml = `
-                <p>Hi Posh Choice Store,</p>
-                <h2>Order Delivered - ${order.orderNumber}</h2>
-                <p>Order for ${user.name} (${user.email}) has been marked as <strong>Delivered</strong>.</p>
-                <p><strong>Order Number:</strong> ${order.orderNumber}</p>
-                <p><strong>Status:</strong> Delivered</p>
-                <p><strong>Total:</strong> ₦${order.totalPrice}</p>
-            `;
-            // Email to customer
-            await sendOrderNotification({
-                to: user.email,
-                subject: `Your Order Has Been Delivered - ${order.orderNumber}`,
-                html: orderDetailsHtml
-            });
+            
+            // Only send customer email if we have a valid email
+            if (userEmail) {
+                const orderDetailsHtml = `
+                    <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px; color: #222;">
+                      <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #eee; padding: 32px;">
+                        <h2 style="color: #e67e22;">Order Delivered - ${order.orderNumber}</h2>
+                        <p style="font-size: 16px;">Hi ${userName},</p>
+                        <p>Great news! Your order <b>${order.orderNumber}</b> has been delivered.</p>
+                        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+                        <h3 style="color: #333;">Order Details</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                          <tr><td style="padding: 6px 0;">Order Number:</td><td style="padding: 6px 0;"><b>${order.orderNumber}</b></td></tr>
+                          <tr><td>Status:</td><td><strong>Delivered</strong></td></tr>
+                          <tr><td>Total Amount:</td><td><b>₦${order.totalPrice}</b></td></tr>
+                        </table>
+                        <p style="margin-top: 32px; font-size: 15px; color: #888;">Thank you for shopping with us!<br/>Posh Choice Store</p>
+                      </div>
+                    </div>
+                `;
+                await sendOrderNotification({
+                    to: userEmail,
+                    subject: `Your Order Has Been Delivered - ${order.orderNumber}`,
+                    html: orderDetailsHtml
+                });
+            }
+            
             // Email to all admins (as to/cc)
             if (adminEmails.length > 0) {
+                const adminOrderDetailsHtml = `
+                    <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px; color: #222;">
+                      <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #eee; padding: 32px;">
+                        <h2 style="color: #e67e22;">Order Delivered - ${order.orderNumber}</h2>
+                        <p>Order for ${userName} ${userEmail ? '(' + userEmail + ')' : '(Guest)'} has been marked as <strong>Delivered</strong>.</p>
+                        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+                        <h3 style="color: #333;">Order Details</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                          <tr><td style="padding: 6px 0;">Order Number:</td><td style="padding: 6px 0;"><b>${order.orderNumber}</b></td></tr>
+                          <tr><td>Status:</td><td>Delivered</td></tr>
+                          <tr><td>Total Amount:</td><td><b>₦${order.totalPrice}</b></td></tr>
+                        </table>
+                        <p style="margin-top: 32px; font-size: 15px; color: #888;">Order delivered via Posh Choice Store.</p>
+                      </div>
+                    </div>
+                `;
                 await sendOrderNotification({
                     to: adminEmails[0],
                     cc: adminEmails.length > 1 ? adminEmails.slice(1) : undefined,
@@ -469,45 +507,75 @@ exports.updateOrderStatus = async (req, res) => {
         
         // --- EMAIL NOTIFICATIONS ---
         try {
-            const user = await User.findById(order.userId);
+            let userEmail, userName;
+            if (order.userId) {
+                const user = await User.findById(order.userId);
+                if (user) {
+                    userEmail = user.email;
+                    userName = user.name;
+                } else {
+                    console.warn(`User not found for order ${order._id}`);
+                    userEmail = null;
+                    userName = 'Customer';
+                }
+            } else {
+                // For guest orders, use shipping address info
+                userEmail = order.shippingAddress.email || null;
+                userName = order.shippingAddress.fullName || 'Guest';
+            }
+            
             const adminEmails = getAdminEmails();
-            const orderDetailsHtml = `
-                <h3>Hi ${user.name}</h3>
-                <p>We are happy to let you know that the status of your order ${order.orderNumber} has been updated.
-                <br />
-                <h2>Order Details</h2>
-                <p><strong>Customer:</strong> ${user.name}</p>
-                <p><strong>Order Number:</strong> ${order.orderNumber}</p>
-                <p><strong>Current Status:</strong> ${order.status}</p>
-                <p><strong>Order Total:</strong> ₦${order.totalPrice}</p>
-                <p>Our team is now preparing your items for shipment. Once your order is dispatched, we will send you another update with tracking details.</p>
-                <p>If you have any questions or need assistance, feel free to reach out to us.</p>
-                <br />
-                <p><strong>Thank you for shopping with Posh Choice Store.</strong></p>
-                <p>We appreciate your trust and look forward to serving you again.</p>
-                <p>Warm regards,</p>
-                <p>Posh Choice Store - <a href="https://poshchoice.com.ng/app/trackorder">Track your order status here.</a></p>
-            `;
-            const adminOrderDetailsHtml = `
-                <h3>Hi Posh Choice Store</h3>
-                <p>This is a confirmation that order ${order.orderNumber} has been updated.
-                <br />
-                <h2>Order Details</h2>
-                <p><strong>Customer:</strong> ${user.name}</p>
-                <p><strong>Order Number:</strong> ${order.orderNumber}</p>
-                <p><strong>Current Status:</strong> ${order.status}</p>
-                <p><strong>Order Total:</strong> ₦${order.totalPrice}</p>
-                <p>You can always manage all orders from your dashboard</p>
-                <p>Warm regards,</p>
-            `;
-            // Email to customer
-            await sendOrderNotification({
-                to: user.email,
-                subject: `Order Status Updated - ${order.orderNumber} | ${order.status}`,
-                html: orderDetailsHtml
-            });
+            
+            // Only send customer email if we have a valid email
+            if (userEmail) {
+                const orderDetailsHtml = `
+                    <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px; color: #222;">
+                      <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #eee; padding: 32px;">
+                        <h3 style="color: #333;">Hi ${userName}</h3>
+                        <p>We are happy to let you know that the status of your order ${order.orderNumber} has been updated.</p>
+                        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+                        <h2 style="color: #333;">Order Details</h2>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                          <tr><td style="padding: 6px 0;">Order Number:</td><td style="padding: 6px 0;"><b>${order.orderNumber}</b></td></tr>
+                          <tr><td>Current Status:</td><td><b>${order.status}</b></td></tr>
+                          <tr><td>Order Total:</td><td><b>₦${order.totalPrice}</b></td></tr>
+                        </table>
+                        <p>Our team is now preparing your items for shipment. Once your order is dispatched, we will send you another update with tracking details.</p>
+                        <p>If you have any questions or need assistance, feel free to reach out to us.</p>
+                        <p style="margin-top: 24px;"><strong>Thank you for shopping with Posh Choice Store.</strong></p>
+                        <p>We appreciate your trust and look forward to serving you again.</p>
+                        <p>Warm regards,</p>
+                        <p>Posh Choice Store - <a href="https://poshchoice.com.ng/app/trackorder" style="color: #e67e22;">Track your order status here.</a></p>
+                      </div>
+                    </div>
+                `;
+                await sendOrderNotification({
+                    to: userEmail,
+                    subject: `Order Status Updated - ${order.orderNumber} | ${order.status}`,
+                    html: orderDetailsHtml
+                });
+            }
+            
             // Email to all admins (as to/cc)
             if (adminEmails.length > 0) {
+                const adminOrderDetailsHtml = `
+                    <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px; color: #222;">
+                      <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px #eee; padding: 32px;">
+                        <h3 style="color: #333;">Hi Posh Choice Store</h3>
+                        <p>This is a confirmation that order ${order.orderNumber} has been updated.</p>
+                        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+                        <h2 style="color: #333;">Order Details</h2>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                          <tr><td style="padding: 6px 0;">Customer:</td><td style="padding: 6px 0;"><b>${userName}</b></td></tr>
+                          <tr><td>Order Number:</td><td><b>${order.orderNumber}</b></td></tr>
+                          <tr><td>Current Status:</td><td><b>${order.status}</b></td></tr>
+                          <tr><td>Order Total:</td><td><b>₦${order.totalPrice}</b></td></tr>
+                        </table>
+                        <p>You can always manage all orders from your dashboard</p>
+                        <p>Warm regards,</p>
+                      </div>
+                    </div>
+                `;
                 await sendOrderNotification({
                     to: adminEmails[0],
                     cc: adminEmails.length > 1 ? adminEmails.slice(1) : undefined,
