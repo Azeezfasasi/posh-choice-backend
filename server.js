@@ -24,6 +24,7 @@ app.use(cors({
     'https://www.poshchoice.com.ng',
     'http://www.poshchoice.com.ng',
     'https://posh-choice.netlify.app',
+    'https://posh-choice-frontend.vercel.app',
     'http://localhost:5173'
   ], // your frontend URL
   credentials: true, // if you use cookies/auth
