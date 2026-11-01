@@ -1,4 +1,5 @@
 const DeliveryLocation = require('../models/DeliveryLocation');
+const { escapeRegex } = require('../utils/sanitize');
 
 // Get all delivery locations (public)
 exports.getAllDeliveryLocations = async (req, res) => {
@@ -20,7 +21,6 @@ exports.getAllDeliveryLocations = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch delivery locations',
-      details: error.message,
     });
   }
 };
@@ -44,7 +44,6 @@ exports.getDeliveryLocationById = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch delivery location',
-      details: error.message,
     });
   }
 };
@@ -63,7 +62,7 @@ exports.createDeliveryLocation = async (req, res) => {
     }
 
     // Check if location already exists
-    const existingLocation = await DeliveryLocation.findOne({ name: { $regex: `^${name}$`, $options: 'i' } });
+    const existingLocation = await DeliveryLocation.findOne({ name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } });
     if (existingLocation) {
       return res.status(409).json({
         success: false,
@@ -98,7 +97,6 @@ exports.createDeliveryLocation = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to create delivery location',
-      details: error.message,
     });
   }
 };
@@ -120,7 +118,7 @@ exports.updateDeliveryLocation = async (req, res) => {
     // Check for duplicate name if being changed
     if (name && name !== location.name) {
       const existingLocation = await DeliveryLocation.findOne({ 
-        name: { $regex: `^${name}$`, $options: 'i' },
+        name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' },
         _id: { $ne: id }
       });
       if (existingLocation) {
@@ -157,7 +155,6 @@ exports.updateDeliveryLocation = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update delivery location',
-      details: error.message,
     });
   }
 };
@@ -185,7 +182,6 @@ exports.deleteDeliveryLocation = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete delivery location',
-      details: error.message,
     });
   }
 };
@@ -217,7 +213,6 @@ exports.bulkUpdateStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update delivery locations',
-      details: error.message,
     });
   }
 };
@@ -235,7 +230,6 @@ exports.getDeliveryLocationCount = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get delivery location count',
-      details: error.message,
     });
   }
 };

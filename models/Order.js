@@ -80,9 +80,9 @@ const orderSchema = mongoose.Schema({
         default: {},
     },
     itemsPrice: { // Sum of all order items' prices
-        type: Object,
+        type: Number,
         required: true,
-        default: {},
+        default: 0.0,
     },
     taxPrice: { 
         type: Number,
@@ -140,13 +140,14 @@ const orderSchema = mongoose.Schema({
         enum: ['Paid', 'Processing', 'Not Paid'],
         default: 'Not Paid'
     },
-    createdAt: {
-        type: Date,
-        default: Date.now,
+    deliveryLocation: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'DeliveryLocation',
+        default: null,
     },
-    updatedAt: {
-        type: Date,
-        default: Date.now,
+    stockRestocked: { // True once a cancelled/refunded order's items were returned to stock
+        type: Boolean,
+        default: false,
     },
 }, {
     timestamps: true

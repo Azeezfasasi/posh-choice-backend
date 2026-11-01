@@ -1,12 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
-const { auth, authorizeRoles } = require('../middleware/auth');
-
-// Optional auth middleware for proof upload - allows both authenticated and guest users
-const optionalAuthForProof = (req, res, next) => {
-  auth(req, res, next, true); // Pass true to make it optional
-};
+const { auth, optionalAuth, authorizeRoles } = require('../middleware/auth');
 
 // POST /api/orders - Allow both authenticated users and guests
 router.post('/', orderController.createOrder);
@@ -30,7 +25,7 @@ router.put('/:id/status', auth, authorizeRoles, orderController.updateOrderStatu
 router.put('/:id/payment-status', auth, authorizeRoles, orderController.updateOrderPaymentStatus);
 
 // POST /api/orders/:orderId/upload-payment-proof - Upload Bank Transfer proof (optional auth)
-router.post('/:orderId/upload-payment-proof', optionalAuthForProof, orderController.uploadPaymentProofMiddleware, orderController.uploadPaymentProof);
+router.post('/:orderId/upload-payment-proof', optionalAuth, orderController.uploadPaymentProofMiddleware, orderController.uploadPaymentProof);
 
 // DELETE /api/orders/:id
 router.delete('/:id', auth, authorizeRoles, orderController.deleteOrder);

@@ -1,48 +1,75 @@
 const Blog = require('../models/Blog');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
+
+const STATUSES = ['draft', 'published'];
+const isAdminRequest = (req) => Boolean(req.user && req.user.isAdmin);
+
+const uploadBlogImage = async (file) => {
+  const result = await cloudinary.uploader.upload(
+    `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+    { folder: 'poshchoice/blog', resource_type: 'image' }
+  );
+  return result.secure_url;
+};
+
+// FormData sends categories as a string ("a,b"), JSON as an array
+const parseCategories = (categories) => {
+  if (categories === undefined) return undefined;
+  if (Array.isArray(categories)) return categories;
+  return String(categories).split(',').map(c => c.trim()).filter(Boolean);
+};
 
 // Create a new blog post
 exports.createBlog = async (req, res) => {
   try {
     const { title, content, categories, status } = req.body;
-    let image = req.file ? `/uploads/${req.file.filename}` : undefined;
+    if (!title || !content) return res.status(400).json({ error: 'Title and content are required.' });
+    if (status && !STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+    const image = req.file ? await uploadBlogImage(req.file) : undefined;
     const blog = await Blog.create({
       title,
       content,
       author: req.user.id,
-      categories,
+      categories: parseCategories(categories),
       image,
       status: status || 'draft',
       publishedAt: status === 'published' ? new Date() : undefined,
     });
     res.status(201).json(blog);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create blog', details: err.message });
+    console.error('Failed to create blog:', err);
+    res.status(500).json({ error: 'Failed to create blog' });
   }
 };
 
-// Get all blogs (optionally filter by status/category)
+// Get all blogs (optionally filter by status/category). The public only sees published posts.
 exports.getBlogs = async (req, res) => {
   try {
     const { status, category } = req.query;
     let filter = {};
-    if (status) filter.status = status;
-    if (category) filter.categories = category;
-    const blogs = await Blog.find(filter).populate('author', 'name email').sort({ createdAt: -1 });
+    if (!isAdminRequest(req)) filter.status = 'published';
+    else if (status) filter.status = status;
+    if (category) filter.categories = String(category);
+    const blogs = await Blog.find(filter).populate('author', 'name').sort({ createdAt: -1 });
     res.json(blogs);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch blogs', details: err.message });
+    console.error('Failed to fetch blogs:', err);
+    res.status(500).json({ error: 'Failed to fetch blogs' });
   }
 };
 
 // Get a single blog post by ID
 exports.getBlogById = async (req, res) => {
   try {
-    const blog = await Blog.findById(req.params.id).populate('author', 'name email');
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    const blog = await Blog.findById(req.params.id).populate('author', 'name');
+    if (!blog || (blog.status !== 'published' && !isAdminRequest(req))) {
+      return res.status(404).json({ error: 'Blog not found' });
+    }
     res.json(blog);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch blog', details: err.message });
+    if (err.name === 'CastError') return res.status(404).json({ error: 'Blog not found' });
+    console.error('Failed to fetch blog:', err);
+    res.status(500).json({ error: 'Failed to fetch blog' });
   }
 };
 
@@ -50,18 +77,24 @@ exports.getBlogById = async (req, res) => {
 exports.editBlog = async (req, res) => {
   try {
     const { title, content, categories, status } = req.body;
-    let update = { title, content, categories, status };
-    if (req.file) {
-      update.image = `/uploads/${req.file.filename}`;
+    if (status && !STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+    const existing = await Blog.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Blog not found' });
+
+    if (title !== undefined) existing.title = title;
+    if (content !== undefined) existing.content = content;
+    if (categories !== undefined) existing.categories = parseCategories(categories);
+    if (req.file) existing.image = await uploadBlogImage(req.file);
+    if (status) {
+      // Only stamp publishedAt the first time a post goes live
+      if (status === 'published' && existing.status !== 'published') existing.publishedAt = new Date();
+      existing.status = status;
     }
-    if (status === 'published') {
-      update.publishedAt = new Date();
-    }
-    const blog = await Blog.findByIdAndUpdate(req.params.id, update, { new: true });
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    const blog = await existing.save();
     res.json(blog);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to edit blog', details: err.message });
+    console.error('Failed to edit blog:', err);
+    res.status(500).json({ error: 'Failed to edit blog' });
   }
 };
 
@@ -72,7 +105,8 @@ exports.deleteBlog = async (req, res) => {
     if (!blog) return res.status(404).json({ error: 'Blog not found' });
     res.json({ message: 'Blog deleted' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete blog', details: err.message });
+    console.error('Failed to delete blog:', err);
+    res.status(500).json({ error: 'Failed to delete blog' });
   }
 };
 
@@ -80,24 +114,26 @@ exports.deleteBlog = async (req, res) => {
 exports.changeStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const update = { status };
-    if (status === 'published') {
-      update.publishedAt = new Date();
-    }
-    const blog = await Blog.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+    const blog = await Blog.findById(req.params.id);
     if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    if (status === 'published' && blog.status !== 'published') blog.publishedAt = new Date();
+    blog.status = status;
+    await blog.save();
     res.json(blog);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to change status', details: err.message });
+    console.error('Failed to change blog status:', err);
+    res.status(500).json({ error: 'Failed to change status' });
   }
 };
 
-// Get all unique categories
+// Get all unique categories (of published posts)
 exports.getCategories = async (req, res) => {
   try {
-    const categories = await Blog.distinct('categories');
+    const categories = await Blog.distinct('categories', { status: 'published' });
     res.json(categories);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch categories', details: err.message });
+    console.error('Failed to fetch blog categories:', err);
+    res.status(500).json({ error: 'Failed to fetch categories' });
   }
 };

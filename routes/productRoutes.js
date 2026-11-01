@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/productController');
-const { auth, authorizeRoles } = require('../middleware/auth'); 
+const { auth, optionalAuth, authorizeRoles } = require('../middleware/auth');
   
   // Public routes
-router.get('/', productController.getAllProducts);
+// optionalAuth lets admins see draft/inactive products; customers only see active ones
+router.get('/', optionalAuth, productController.getAllProducts);
 router.get('/featured', productController.getFeaturedProducts);
 router.get('/sale', productController.getSaleProducts);
 router.get('/count', productController.getProductCount);
-router.get('/:id', productController.getProductById);
-router.get('/slug/:slug', productController.getProductBySlug);
+router.get('/:id', optionalAuth, productController.getProductById);
+router.get('/slug/:slug', optionalAuth, productController.getProductBySlug);
 
 // Protected routes (User/Admin access)
 router.post('/:id/reviews', auth, productController.addProductReview);
@@ -33,7 +34,7 @@ router.put(
   productController.updateProduct                
 );
 
-  router.delete('/:id', auth, authorizeRoles, productController.deleteProduct);
+router.delete('/:id', auth, authorizeRoles, productController.deleteProduct);
 router.delete('/:id/images/:imageIndex', auth, authorizeRoles, productController.deleteProductImage);
 router.put('/:id/featured-image', auth, authorizeRoles, productController.setFeaturedImage);
 router.put('/:id/inventory', auth, authorizeRoles, productController.updateInventory);

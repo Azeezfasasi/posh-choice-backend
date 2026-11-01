@@ -5,6 +5,12 @@ const path = require('path');
 const multer = require('multer');
 const slugify = require('slugify');
 const cloudinary = require('cloudinary').v2;
+const mongoose = require('mongoose');
+const { escapeRegex } = require('../utils/sanitize');
+const { uploadError } = require('../utils/uploadError');
+
+const MAX_PAGE_SIZE = 100;
+const isAdminRequest = (req) => Boolean(req.user && req.user.isAdmin);
 
 // Helper function to extract public_id from Cloudinary URL
 const getPublicIdFromCloudinaryUrl = (url) => {
@@ -33,7 +39,7 @@ const productFileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('Not an image! Please upload only images for products.'), false);
+    cb(uploadError('Not an image! Please upload only images for products.'), false);
   }
 };
 
@@ -46,7 +52,6 @@ exports.uploadMiddlewareMemory = multer({
 // Define the async image processing middleware separately
 exports.processUploadedImages = async (req, res, next) => {
   try {
-    console.log('processUploadedImages: req.files:', req.files);
     let uploadedImages = [];
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       for (const image of req.files) {
@@ -76,19 +81,27 @@ exports.processUploadedImages = async (req, res, next) => {
 // Get all products
 exports.getAllProducts = async (req, res) => {
   try {
-    const { category, brand, minPrice, maxPrice, status, sortBy, search, page = 1, limit = 10 } = req.query;
+    const { category, brand, minPrice, maxPrice, status, sortBy, search } = req.query;
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), MAX_PAGE_SIZE);
     const query = {};
 
     if (category) {
-      const categoryDoc = await Category.findOne({ $or: [{ _id: category }, { slug: category }] });
+      // Accept either an ObjectId or a slug (a slug can't be cast to _id)
+      const categoryQuery = mongoose.Types.ObjectId.isValid(category)
+        ? { $or: [{ _id: category }, { slug: category }] }
+        : { slug: category };
+      const categoryDoc = await Category.findOne(categoryQuery);
       if (categoryDoc) {
         query.category = categoryDoc._id;
       } else {
         return res.status(404).json({ error: 'Category not found' });
       }
     }
-    if (brand) query.brand = new RegExp(brand, 'i');
-    if (status) query.status = status;
+    if (brand) query.brand = new RegExp(escapeRegex(brand), 'i');
+    // Customers only ever see active products; admins can filter by any status
+    if (!isAdminRequest(req)) query.status = 'active';
+    else if (status) query.status = status;
 
     if (minPrice || maxPrice) {
       query.price = {};
@@ -97,12 +110,13 @@ exports.getAllProducts = async (req, res) => {
     }
 
     if (search) {
+      const safeSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { brand: { $regex: search, $options: 'i' } },
-        { sku: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { description: { $regex: safeSearch, $options: 'i' } },
+        { brand: { $regex: safeSearch, $options: 'i' } },
+        { sku: { $regex: safeSearch, $options: 'i' } },
+        { tags: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -119,7 +133,7 @@ exports.getAllProducts = async (req, res) => {
     const products = await Product.find(query)
       .sort(sortOptions)
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(limit);
 
     const totalProducts = await Product.countDocuments(query);
     const totalPages = Math.ceil(totalProducts / limit);
@@ -128,14 +142,13 @@ exports.getAllProducts = async (req, res) => {
       data: products,
       totalProducts,
       totalPages,
-      currentPage: parseInt(page),
-      limit: parseInt(limit),
+      currentPage: page,
+      limit,
     });
   } catch (err) {
     console.error('Error in getAllProducts:', err);
     res.status(500).json({
       error: 'Failed to fetch products',
-      details: err.message,
     });
   }
 };
@@ -144,7 +157,7 @@ exports.getAllProducts = async (req, res) => {
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) {
+    if (!product || (product.status !== 'active' && !isAdminRequest(req))) {
       return res.status(404).json({ error: 'Product not found' });
     }
     res.status(200).json(product);
@@ -152,7 +165,6 @@ exports.getProductById = async (req, res) => {
     console.error('Error in getProductById:', err);
     res.status(500).json({
       error: 'Failed to fetch product',
-      details: err.message,
     });
   }
 };
@@ -161,7 +173,7 @@ exports.getProductById = async (req, res) => {
 exports.getProductBySlug = async (req, res) => {
   try {
     const product = await Product.findOne({ slug: req.params.slug });
-    if (!product) {
+    if (!product || (product.status !== 'active' && !isAdminRequest(req))) {
       return res.status(404).json({ error: 'Product not found' });
     }
     res.status(200).json(product);
@@ -169,7 +181,6 @@ exports.getProductBySlug = async (req, res) => {
     console.error('Error in getProductBySlug:', err);
     res.status(500).json({
       error: 'Failed to fetch product',
-      details: err.message,
     });
   }
 };
@@ -184,7 +195,6 @@ exports.getFeaturedProducts = async (req, res) => {
     console.error('Error in getFeaturedProducts:', err);
     res.status(500).json({
       error: 'Failed to fetch featured products',
-      details: err.message,
     });
   }
 };
@@ -199,7 +209,6 @@ exports.getSaleProducts = async (req, res) => {
     console.error('Error in getSaleProducts:', err);
     res.status(500).json({
       error: 'Failed to fetch sale products',
-      details: err.message,
     });
   }
 };
@@ -229,7 +238,8 @@ exports.createProduct = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!name || !description || !price || !category || !stockQuantity) {
+    const isBlank = (v) => v === undefined || v === null || v === '';
+    if (!name || !description || isBlank(price) || !category || isBlank(stockQuantity)) {
       return res.status(400).json({ error: 'Name, description, price, category, and stock quantity are required.' });
     }
 
@@ -292,7 +302,6 @@ exports.createProduct = async (req, res) => {
     }
     res.status(500).json({
       error: 'Failed to create product',
-      details: err.message,
     });
   }
 };
@@ -467,7 +476,6 @@ exports.updateProduct = async (req, res) => {
     }
     res.status(500).json({
       error: 'Failed to update product',
-      details: err.message,
     });
   }
 };
@@ -488,7 +496,6 @@ exports.deleteProduct = async (req, res) => {
         if (publicId) {
           try {
             await cloudinary.uploader.destroy(publicId);
-            console.log(`Deleted Cloudinary image for product delete: ${publicId}`);
           } catch (cloudinaryErr) {
             console.error(`Failed to delete Cloudinary image ${publicId} during product delete:`, cloudinaryErr);
           }
@@ -502,7 +509,6 @@ exports.deleteProduct = async (req, res) => {
     console.error('Error deleting product:', err);
     res.status(500).json({
       error: 'Failed to delete product',
-      details: err.message,
     });
   }
 };
@@ -542,7 +548,6 @@ exports.deleteProductImage = async (req, res) => {
     if (publicId) {
       try {
         await cloudinary.uploader.destroy(publicId);
-        console.log(`Deleted Cloudinary image: ${publicId}`);
       } catch (cloudinaryErr) {
         console.error(`Failed to delete Cloudinary image ${publicId}:`, cloudinaryErr);
       }
@@ -553,7 +558,6 @@ exports.deleteProductImage = async (req, res) => {
     console.error('Error deleting product image:', err);
     res.status(500).json({
       error: 'Failed to delete image',
-      details: err.message,
     });
   }
 };
@@ -588,7 +592,6 @@ exports.setFeaturedImage = async (req, res) => {
     console.error('Error setting featured image:', err);
     res.status(500).json({
       error: 'Failed to set featured image',
-      details: err.message,
     });
   }
 };
@@ -616,7 +619,6 @@ exports.updateInventory = async (req, res) => {
     console.error('Error updating inventory:', err);
     res.status(500).json({
       error: 'Failed to update inventory',
-      details: err.message,
     });
   }
 };
@@ -646,7 +648,6 @@ exports.bulkUpdateStatus = async (req, res) => {
     console.error('Error bulk updating product status:', err);
     res.status(500).json({
       error: 'Failed to bulk update product status',
-      details: err.message,
     });
   }
 };
@@ -678,7 +679,6 @@ exports.addProductReview = async (req, res) => {
     if (alreadyReviewed) {
       alreadyReviewed.rating = Number(rating);
       alreadyReviewed.comment = comment;
-      res.status(200).json({ message: 'Review updated successfully', product });
     } else {
       const review = {
         user: userId,
@@ -687,18 +687,21 @@ exports.addProductReview = async (req, res) => {
         comment,
       };
       product.reviews.push(review);
-      res.status(201).json({ message: 'Review added successfully', product });
     }
 
     // Update average rating and number of reviews
     product.updateAverageRating();
     await product.save();
+    if (alreadyReviewed) {
+      res.status(200).json({ message: 'Review updated successfully', product });
+    } else {
+      res.status(201).json({ message: 'Review added successfully', product });
+    }
 
   } catch (err) {
     console.error('Error adding product review:', err);
     res.status(500).json({
       error: 'Failed to add review',
-      details: err.message,
     });
   }
 };

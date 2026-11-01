@@ -15,7 +15,7 @@ exports.getWishlist = async (req, res) => {
         res.status(200).json(wishlist);
     } catch (error) {
         console.error('Error fetching wishlist:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -65,7 +65,7 @@ exports.addToWishlist = async (req, res) => {
         }
     } catch (error) {
         console.error('Error adding to wishlist:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -91,6 +91,6 @@ exports.removeFromWishlist = async (req, res) => {
         res.status(200).json({ message: 'Product removed from wishlist.', wishlist });
     } catch (error) {
         console.error('Error removing from wishlist:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };

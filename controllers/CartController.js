@@ -16,8 +16,45 @@ function getCartQuery(req) {
   }
 }
 
+const parseQuantity = (value) => {
+  const quantity = Number(value);
+  return Number.isInteger(quantity) && quantity > 0 ? quantity : null;
+};
+
+// When a logged-in user still has a guest cart from before they signed in,
+// move its items into their account cart and delete the guest cart.
+async function mergeGuestCart(req) {
+  const guestSessionId = req.headers['x-guest-session-id'];
+  if (!req.user || !guestSessionId) return;
+
+  const guestCart = await Cart.findOne({ guestSessionId, userId: null });
+  if (!guestCart || guestCart.items.length === 0) return;
+
+  let userCart = await Cart.findOne({ userId: req.user._id });
+  if (!userCart) {
+    userCart = new Cart({ userId: req.user._id, items: [] });
+  }
+  for (const guestItem of guestCart.items) {
+    const existing = userCart.items.find(i => i.productId.toString() === guestItem.productId.toString());
+    if (existing) {
+      existing.quantity += guestItem.quantity;
+    } else {
+      userCart.items.push({
+        productId: guestItem.productId,
+        name: guestItem.name,
+        image: guestItem.image,
+        price: guestItem.price,
+        quantity: guestItem.quantity,
+      });
+    }
+  }
+  await userCart.save();
+  await guestCart.deleteOne();
+}
+
 exports.getCart = async (req, res) => {
     try {
+        await mergeGuestCart(req);
         // Find cart for either authenticated or guest user
         const cartQuery = getCartQuery(req);
         const cart = await Cart.findOne(cartQuery).populate({
@@ -32,21 +69,22 @@ exports.getCart = async (req, res) => {
         res.status(200).json(cart);
     } catch (error) {
         console.error('Error fetching cart:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
 exports.addToCart = async (req, res) => {
-    const { productId, quantity } = req.body;
+    const { productId } = req.body;
+    const quantity = parseQuantity(req.body.quantity);
 
-    if (!productId || !quantity || quantity <= 0) {
+    if (!productId || !quantity) {
         return res.status(400).json({ message: 'Product ID and a valid quantity are required.' });
     }
 
     try {
         const product = await Product.findById(productId);
 
-        if (!product) {
+        if (!product || product.status !== 'active') {
             return res.status(404).json({ message: 'Product not found.' });
         }
 
@@ -113,15 +151,15 @@ exports.addToCart = async (req, res) => {
         }
     } catch (error) {
         console.error('Error adding to cart:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
 exports.updateCartItemQuantity = async (req, res) => {
     const { productId } = req.params;
-    const { quantity } = req.body;
+    const quantity = parseQuantity(req.body.quantity);
 
-    if (!quantity || quantity <= 0) {
+    if (!quantity) {
         return res.status(400).json({ message: 'A valid quantity (greater than 0) is required.' });
     }
 
@@ -153,7 +191,7 @@ exports.updateCartItemQuantity = async (req, res) => {
         res.status(200).json({ message: 'Cart item quantity updated.', cart });
     } catch (error) {
         console.error('Error updating cart item quantity:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -183,7 +221,7 @@ exports.removeCartItem = async (req, res) => {
         res.status(200).json({ message: 'Cart item removed.', cart });
     } catch (error) {
         console.error('Error removing cart item:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };
 
@@ -198,6 +236,6 @@ exports.clearCart = async (req, res) => {
         res.status(200).json({ message: 'Cart cleared successfully.' });
     } catch (error) {
         console.error('Error clearing cart:', error);
-        res.status(500).json({ message: 'Server Error', details: error.message });
+        res.status(500).json({ message: 'Server Error' });
     }
 };

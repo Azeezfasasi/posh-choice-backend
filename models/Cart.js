@@ -52,9 +52,9 @@ cartSchema.pre('save', function (next) {
     next();
 });
 
-// Create a sparse unique index on userId (for authenticated users)
-// and a compound unique index for guest sessions
-cartSchema.index({ userId: 1 }, { unique: true, sparse: true });
-cartSchema.index({ guestSessionId: 1 }, { unique: true, sparse: true });
+// One cart per user and one per guest session. Partial indexes skip the null
+// values (a sparse index would still index nulls and collide on the 2nd cart).
+cartSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { userId: { $type: 'objectId' } } });
+cartSchema.index({ guestSessionId: 1 }, { unique: true, partialFilterExpression: { guestSessionId: { $type: 'string' } } });
 
 module.exports = mongoose.model('Cart', cartSchema);
