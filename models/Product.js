@@ -39,7 +39,7 @@ const productSchema = new mongoose.Schema({
   description: {
     type: String,
     required: [true, 'Product description is required'],
-    maxlength: [2000, 'Product description cannot exceed 1000 characters'],
+    maxlength: [2000, 'Product description cannot exceed 2000 characters'],
   },
   richDescription: { // Added for richer content
     type: String,
@@ -114,7 +114,7 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: 0,
     max: 5,
-    set: (val) => parseFloat(val.toFixed(1)),
+    set: (val) => (typeof val === 'number' ? parseFloat(val.toFixed(1)) : val),
   },
   numReviews: {
     type: Number,

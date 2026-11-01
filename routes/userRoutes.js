@@ -6,6 +6,7 @@ const {
   requestPasswordReset,
   resetPassword,
   getAllUsers,
+  createUser,
   getProfile,
   updateProfile,
   editUser,
@@ -41,6 +42,9 @@ router.put('/me', auth, updateProfile);
 // Admin/Super Admin routes
 // GET /api/users
 router.get('/', auth, authorizeRoles, getAllUsers);
+
+// POST /api/users
+router.post('/', auth, authorizeRoles, createUser);
 
 // PUT /api/users/:id
 router.put('/:id', auth, authorizeRoles, editUser);

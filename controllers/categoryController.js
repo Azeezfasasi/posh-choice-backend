@@ -1,34 +1,37 @@
 const Category = require('../models/Category');
 const Product = require('../models/Product'); 
 const multer = require('multer');
-const fs = require('fs');
-const fsp = require('fs/promises'); 
-const path = require('path');
+const { escapeRegex } = require('../utils/sanitize');
+const { uploadError } = require('../utils/uploadError');
 const slugify = require('slugify'); 
 const cloudinary = require('cloudinary').v2; 
 
-// --- Multer Setup for Category Images (Disk Storage for simplicity, 
-const categoryStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Ensure the 'uploads' directory exists
-    const uploadDir = 'uploads';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir);
-    }
-    cb(null, uploadDir); // Temporarily store in an 'uploads' folder
-  },
-  filename: function (req, file, cb) {
-    // Generate a unique filename using timestamp and original extension
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${slugify(file.originalname.split('.')[0], { lower: true, strict: true })}${ext}`);
+// --- Multer Setup for Category Images (memory storage: no local disk needed, works on Vercel) ---
+const categoryStorage = multer.memoryStorage();
+
+// Uploads an in-memory file to Cloudinary
+const uploadCategoryImageToCloudinary = (file) => cloudinary.uploader.upload(
+  `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+  {
+    folder: 'ecomm-categories',
+    resource_type: 'image',
+    transformation: [
+        { width: 400, height: 300, crop: "fill", gravity: "auto" }
+    ]
   }
-});
+);
+
+// Accepts real booleans (JSON) and 'true'/'false' strings (FormData); missing means active
+const parseIsActive = (value, fallback = true) => {
+  if (value === undefined || value === '') return fallback;
+  return value === true || value === 'true';
+};
 
 const categoryFileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed for categories!'), false);
+    cb(uploadError('Only image files are allowed for categories!'), false);
   }
 };
 
@@ -50,7 +53,6 @@ exports.getAllCategories = async (req, res) => {
     console.error('Error in getAllCategories:', err);
     res.status(500).json({
       error: 'Failed to fetch categories',
-      details: err.message
     });
   }
 };
@@ -69,7 +71,6 @@ exports.getCategoryById = async (req, res) => {
     console.error('Error in getCategoryById:', err);
     res.status(500).json({
       error: 'Failed to fetch category',
-      details: err.message
     });
   }
 };
@@ -88,7 +89,6 @@ exports.getCategoryBySlug = async (req, res) => {
     console.error('Error in getCategoryBySlug:', err);
     res.status(500).json({
       error: 'Failed to fetch category by slug',
-      details: err.message
     });
   }
 };
@@ -105,7 +105,8 @@ exports.getCategoryTree = async (req, res) => {
       items
         .filter(item =>
           (parentId === null && !item.parent) ||
-          (item.parent && item.parent.toString() === parentId)
+          // parent is auto-populated, so compare its _id
+          (item.parent && (item.parent._id || item.parent).toString() === parentId)
         )
         .forEach(item => {
           const children = buildTree(items, item._id.toString());
@@ -126,7 +127,6 @@ exports.getCategoryTree = async (req, res) => {
     console.error('Error in getCategoryTree:', err);
     res.status(500).json({
       error: 'Failed to fetch category tree',
-      details: err.message
     });
   }
 };
@@ -134,10 +134,6 @@ exports.getCategoryTree = async (req, res) => {
 
 // Create new category (Admin Only)
 exports.createCategory = async (req, res) => {
-    console.log('--- Backend: Entering createCategory controller ---');
-    console.log('Backend: req.body received:', req.body);
-    console.log('Backend: req.file received:', req.file);
-    console.log('Backend: name from req.body:', req.body.name);
   try {
     let { name, description, parent, sortOrder, isActive } = req.body;
 
@@ -147,35 +143,24 @@ exports.createCategory = async (req, res) => {
     }
     name = name.trim();
 
-    // Convert boolean string to boolean
-    isActive = isActive === 'true';
-    // Handle image upload to Cloudinary
-    let imageUrl = '';
-    let imagePublicId = '';
-    if (req.file) { // req.file contains information about the single uploaded file
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: 'ecomm-categories', // Specific folder in your Cloudinary account
-        use_filename: true, // Use original filename (sanitized)
-        unique_filename: true, // Ensure uniqueness
-        resource_type: 'image', // Explicitly specify resource type
-        transformation: [
-            { width: 400, height: 300, crop: "fill", gravity: "auto" } // Example transformation
-        ]
-      });
-      imageUrl = result.secure_url;
-      imagePublicId = result.public_id;
-
-      // Delete the temporary file from the local server
-      await fsp.unlink(req.file.path);
-    }
+    isActive = parseIsActive(isActive);
 
     // Generate slug
     const slug = slugify(name, { lower: true, strict: true, trim: true });
 
-    // Check for existing category name or slug
-    const existingCategory = await Category.findOne({ $or: [{ name: new RegExp(`^${name}$`, 'i') }, { slug: slug }] });
+    // Check for existing category name or slug (before uploading, so no orphaned images)
+    const existingCategory = await Category.findOne({ $or: [{ name: new RegExp(`^${escapeRegex(name)}$`, 'i') }, { slug: slug }] });
     if (existingCategory) {
         return res.status(400).json({ error: 'A category with this name or slug already exists.' });
+    }
+
+    // Handle image upload to Cloudinary
+    let imageUrl = '';
+    let imagePublicId = '';
+    if (req.file) {
+      const result = await uploadCategoryImageToCloudinary(req.file);
+      imageUrl = result.secure_url;
+      imagePublicId = result.public_id;
     }
 
     const newCategory = new Category({
@@ -200,7 +185,6 @@ exports.createCategory = async (req, res) => {
     }
     res.status(500).json({
       error: 'Failed to create category',
-      details: err.message,
     });
   }
 };
@@ -217,36 +201,28 @@ exports.updateCategory = async (req, res) => {
       return res.status(404).json({ error: 'Category not found' });
     }
 
-    // Convert boolean string to boolean
-    isActive = isActive === 'true';
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Category name is required.' });
+    }
+    name = name.trim();
+    isActive = parseIsActive(isActive, category.isActive);
 
     // Handle image update/removal logic
     if (req.file) { // A new file was uploaded
       // Delete old image from Cloudinary if it exists
       if (category.imagePublicId) {
         await cloudinary.uploader.destroy(category.imagePublicId);
-        console.log(`Deleted old Cloudinary image: ${category.imagePublicId}`);
       }
 
       // Upload new image
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: 'ecomm-categories',
-        use_filename: true,
-        unique_filename: true,
-        resource_type: 'image',
-        transformation: [
-            { width: 400, height: 300, crop: "fill", gravity: "auto" }
-        ]
-      });
+      const result = await uploadCategoryImageToCloudinary(req.file);
       category.image = result.secure_url;
       category.imagePublicId = result.public_id;
-      await fsp.unlink(req.file.path); // Delete temp local file
 
-    } else if (clearImage === 'true' && category.image) {
+    } else if ((clearImage === 'true' || clearImage === true) && category.image) {
       // Frontend explicitly sent 'clearImage' flag, and there's an existing image
       if (category.imagePublicId) {
         await cloudinary.uploader.destroy(category.imagePublicId);
-        console.log(`Deleted old Cloudinary image due to clearImage flag: ${category.imagePublicId}`);
       }
       category.image = ''; // Clear image URL in DB
       category.imagePublicId = ''; // Clear public ID
@@ -285,7 +261,6 @@ exports.updateCategory = async (req, res) => {
     }
     res.status(500).json({
       error: 'Failed to update category',
-      details: err.message,
     });
   }
 };
@@ -316,7 +291,6 @@ exports.deleteCategory = async (req, res) => {
     if (category.imagePublicId) {
       try {
         await cloudinary.uploader.destroy(category.imagePublicId);
-        console.log(`Deleted Cloudinary image for category delete: ${category.imagePublicId}`);
       } catch (cloudinaryErr) {
         console.error(`Failed to delete Cloudinary image ${category.imagePublicId} during category delete:`, cloudinaryErr);
       }
@@ -329,7 +303,6 @@ exports.deleteCategory = async (req, res) => {
     console.error('Error deleting category:', err);
     res.status(500).json({
       error: 'Failed to delete category',
-      details: err.message
     });
   }
 };

@@ -1,12 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const cartController = require('../controllers/CartController');
-const { auth } = require('../middleware/auth');
-
-// Optional auth middleware - allows both authenticated and guest requests
-const optionalAuth = (req, res, next) => {
-  auth(req, res, next, true); // Pass true to make it optional
-};
+const { optionalAuth } = require('../middleware/auth');
 
 // GET user's cart - /api/cart
 router.get('/', optionalAuth, cartController.getCart);

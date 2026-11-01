@@ -1,64 +1,11 @@
-require('./utils/cloudinary');
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-const userRoutes = require('./routes/userRoutes');
-const productRoutes = require('./routes/productRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
-const quoteRoutes = require('./routes/quoteRoutes');
-const blogRoutes = require('./routes/blogRoutes');
-const cartRoutes = require('./routes/cartRoutes');
-const wishlistRoutes = require('./routes/wishlistRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const newsletterRoutes = require('./routes/newsletterRoutes');
-const deliveryLocationRoutes = require('./routes/deliveryLocationRoutes');
-require('dotenv').config();
+// Local / long-running server entry point (Render, `npm start`, `npm run dev`).
+// On Vercel, api/index.js is used instead.
+const app = require('./app');
+const { connectDB } = require('./utils/db');
 
-const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS middleware (must be before any other middleware/routes)
-app.use(cors({
-  origin: [
-    'https://poshchoice.com.ng',
-    'https://www.poshchoice.com.ng',
-    'http://www.poshchoice.com.ng',
-    'https://posh-choice.netlify.app',
-    'https://posh-choice-frontend.vercel.app',
-    'http://localhost:5173'
-  ], // your frontend URL
-  credentials: true, // if you use cookies/auth
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-session-id'],
-}));
-// Handle preflight requests for all routes
-app.options('*', cors());
-
-// MongoDB connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('MongoDB connected');
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
-  });
-
-app.use(express.json());
-
-app.use('/api/users', userRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api', quoteRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/wishlist', wishlistRoutes);
-app.use('/api/blog', blogRoutes);
-app.use('/api/newsletter', newsletterRoutes);
-app.use('/api/delivery-locations', deliveryLocationRoutes);
-
-app.get('/', (req, res) => {
-  res.send('Posh Choice Store Backend Running');
-});
+connectDB().catch((err) => console.error('MongoDB connection error:', err.message));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -1,30 +1,30 @@
 const express = require('express');
 const router = express.Router();
 const blogController = require('../controllers/blogController');
-const { auth, authorizeRoles } = require('../middleware/auth');
+const { auth, optionalAuth, authorizeRoles } = require('../middleware/auth');
 const multer = require('multer');
-const path = require('path');
+const { uploadError } = require('../utils/uploadError');
 
-// Multer setup for image upload
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '../uploads'));
+// Images are kept in memory and sent to Cloudinary (no local disk; works on Vercel)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(uploadError('Only image files are allowed for blog posts!'), false);
   },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
 });
-const upload = multer({ storage });
 
 // Public: Get all blogs, get single blog, get categories
+// (optionalAuth lets admins also see drafts)
 // GET /api/blog
-router.get('/', blogController.getBlogs);
+router.get('/', optionalAuth, blogController.getBlogs);
 
 // GET /api/blog/categories
 router.get('/categories', blogController.getCategories);
 
 // GET /api/blog /api/blog/:ID
-router.get('/:id', blogController.getBlogById);
+router.get('/:id', optionalAuth, blogController.getBlogById);
 
 // Protected: Create, edit, delete, change status (admin/super admin)
 // POST /api/blog
